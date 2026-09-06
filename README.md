@@ -281,23 +281,29 @@ Retrieval is scoped to the authenticated user before results are fused or rerank
 ```text
 Enterprise RAG Assistant/
 │
-├── app.py
+|
 ├── requirements.txt
 ├── .gitignore
 │
 ├── api/
-│   ├── schemas.py
-│   └── dependencies.py
+│   ├── __init__.py
+│   ├── dependencies.py
+│   ├── main.py
+│   └── schemas.py
 │
 ├── auth/
+│   ├── __init__.py
+│   ├── dependencies.py
 │   ├── schemas.py
 │   ├── security.py
-│   ├── session.py
-│   └── dependencies.py
+│   └── session.py
 │
 ├── database/
-│   ├── models.py
-│   └── crud.py
+│   ├── __init__.py
+│   ├── crud.py
+│   ├── database.py
+│   ├── init_db.py
+│   └── models.py
 │
 ├── src/
 │   ├── config.py
