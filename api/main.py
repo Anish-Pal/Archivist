@@ -720,12 +720,19 @@ def delete_document(
             rag["vector_store"], 
             current_user.id
         )
-        user_bm25 = create_bm25_retriever(user_chunks)
 
-        rag["user_rag"][current_user.id] = {
-            "chunks": user_chunks, 
-            "bm25": user_bm25
-            }
+        if user_chunks :
+
+            user_bm25 = create_bm25_retriever(user_chunks)
+
+            rag["user_rag"][current_user.id] = {
+                "chunks": user_chunks, 
+                "bm25": user_bm25
+                }
+
+        else:
+
+            rag["user_rag"].pop(current_user.id, None)    
 
     except Exception as e:
 
