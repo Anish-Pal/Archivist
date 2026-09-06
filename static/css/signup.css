@@ -1,0 +1,181 @@
+/* =========================================================
+   ARCHIVIST — signup.css
+   Layers on top of style.css + auth.css (shared shell/card/
+   theme-toggle). Only the signup-specific story elements
+   live here: the step timeline and the indexing card.
+   ========================================================= */
+
+.signup-heading {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 32px;
+  line-height: 1.2;
+  margin: 0 0 14px;
+  color: var(--text-primary);
+}
+
+.signup-subheading {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 36px;
+  max-width: 360px;
+}
+
+/* --- Step timeline --- */
+
+.step-timeline {
+  list-style: none;
+  margin: 0 0 40px;
+  padding: 0;
+  position: relative;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  padding-bottom: 22px;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.step.is-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  width: 1px;
+  height: calc(100% - 14px);
+  background: var(--border);
+}
+
+.step__badge {
+  flex-shrink: 0;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-sidebar);
+  position: relative;
+  z-index: 1;
+}
+
+.step__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.step__text strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.step__text span {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step {
+    transition: none;
+  }
+}
+
+/* --- Indexing progress card --- */
+
+.indexing-card {
+  width: 300px;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.indexing-card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--text-secondary);
+}
+
+.indexing-card__row svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.indexing-card__row span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  transition: opacity 0.25s ease;
+}
+
+.indexing-card__bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.indexing-card__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: var(--accent);
+  animation: fill-loop 4s ease-in-out infinite;
+}
+
+@keyframes fill-loop {
+  0%   { width: 0%; }
+  70%  { width: 100%; }
+  100% { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indexing-card__fill {
+    animation: none;
+    width: 60%;
+  }
+}
+
+/* --- Success message (signup-specific, error already styled by auth.css) --- */
+
+.auth-success {
+  font-size: 12.5px;
+  color: var(--success);
+  display: none;
+  margin: -6px 0 16px;
+}
+
+.auth-success.is-visible {
+  display: block;
+}
+
+.field input.field--invalid {
+  border-color: var(--danger);
+}
+
+.field-hint {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 5px;
+}
