@@ -542,17 +542,23 @@ Document and conversation queries include the current user's ID when looking up 
 
 ## Future Work
 
+**Retrieval & Indexing**
 - Incremental BM25 index updates
 - Semantic or embedding-based chunking
 - Markdown/header-aware chunking
+- External/managed vector database (e.g., Qdrant) for native multi-tenancy
+
+**Security & Operations**
 - Role- or department-level document sharing
 - Email/OTP verification
-- Retrieval and citation evaluation benchmarks
-- Streaming LLM responses
-- External/managed vector database such as Qdrant
-- Background ingestion jobs for large documents
 - More robust document cleanup and retry handling
+- Background ingestion jobs for large documents
+- Rate limiting under LLM API quota exhaustion
+
+**Quality & Observability**
+- Retrieval and citation evaluation benchmarks
 - Production monitoring and observability
+- Streaming LLM responses
 
 ---
 
