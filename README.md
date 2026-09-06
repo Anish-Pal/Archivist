@@ -564,9 +564,7 @@ Document and conversation queries include the current user's ID when looking up 
 
 ## License
 
-This project is licensed under the MIT License.
-
-If you use the MIT license, include the full MIT license text in a `LICENSE` file at the repository root.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for the full license text.
 
 ---
 
