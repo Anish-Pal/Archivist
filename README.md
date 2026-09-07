@@ -4,7 +4,7 @@
 
 Archivist is a multi-user Retrieval-Augmented Generation (RAG) application that lets users upload their own documents and ask questions about them in plain language. The system combines dense vector retrieval, sparse keyword retrieval, Reciprocal Rank Fusion (RRF), cross-encoder reranking, query rewriting, conversational history, and citation validation to produce source-grounded answers.
 
-Built as a final-year Computer Science project with a focus on practical backend engineering, retrieval quality, authentication, multi-user data isolation, document management, and a custom web interface.
+Built with a focus on practical backend engineering, retrieval quality, authentication, multi-user data isolation, document management, and a custom web interface.
 
 ---
 
@@ -570,4 +570,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Project Status
 
-Archivist is currently feature-complete as a final-year project and is ready for final testing, deployment, documentation, and portfolio presentation.
+Archivist is currently feature-complete and is ready for final testing, deployment, documentation, and portfolio presentation.
