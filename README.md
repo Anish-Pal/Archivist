@@ -353,7 +353,7 @@ Enterprise RAG Assistant/
 │   │   ├── auth.css
 │   │   └── signup.css
 │   │
-│   └── js/
+│   └── Js/
 │       ├── chat.js
 │       ├── login.js
 │       └── signup.js
