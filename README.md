@@ -297,14 +297,11 @@ Enterprise RAG Assistant/
 │   └── bootstrap_db.py
 │
 ├── deploy/
-│   ├── aws/
-│   │   ├── bootstrap.sh
-│   │   ├── docker-compose.yml
-│   │   ├── nginx.conf
-│   │   └── .env.example
-│   └── hf/
-│       ├── SPACE_README.md
-│       └── push.sh
+│   └── aws/
+│       ├── bootstrap.sh
+│       ├── docker-compose.yml
+│       ├── nginx.conf
+│       └── .env.example
 │
 ├── api/
 │   ├── __init__.py
@@ -577,9 +574,8 @@ Document and conversation queries include the current user's ID when looking up 
 
 ## Deployment
 
-The app ships as a Docker image. The primary target is a single **EC2**
-instance with **Neon** as the managed PostgreSQL instance; the same image also
-runs on Hugging Face Spaces (see [Alternative](#alternative-hugging-face-spaces)).
+The app ships as a Docker image, deployed to a single **EC2** instance with
+**Neon** as the managed PostgreSQL instance.
 
 ### Why this shape
 
@@ -606,7 +602,6 @@ Three properties of the app drive the deployment:
 | `deploy/aws/bootstrap.sh` | Provisions a fresh Ubuntu instance end to end |
 | `deploy/aws/docker-compose.yml` | Runs the app on loopback with a bind-mounted volume |
 | `deploy/aws/nginx.conf` | TLS reverse proxy with upload and timeout limits raised |
-| `deploy/hf/` | Space card and publish script for the Spaces alternative |
 
 ### EC2
 
@@ -645,28 +640,6 @@ Updating:
 git pull
 sudo docker compose -f deploy/aws/docker-compose.yml up -d --build
 ```
-
-### Alternative: Hugging Face Spaces
-
-The same image runs on a Spaces Docker SDK Space. Note that **Docker Spaces
-require a PRO subscription** — since mid-2026, only Static Spaces are free.
-
-1. Create a Space at <https://huggingface.co/new-space> with SDK **Docker**
-   (blank template) and hardware **CPU Basic**.
-2. Add `DB_URL` and `GROQ_API_KEY` under *Settings → Variables and secrets*.
-   The container refuses to start without both.
-3. Add persistent storage under *Settings → Storage* so uploads and the vector
-   index survive restarts.
-4. Publish:
-
-   ```bash
-   HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name> deploy/hf-spaces
-   ```
-
-   The script exports the named ref with `git archive`, so only committed,
-   git-tracked content is published and uncommitted edits are never deployed.
-   Spaces build from their own `main`, so the chosen ref is pushed there
-   regardless of its local name.
 
 ### Verifying the image locally
 
