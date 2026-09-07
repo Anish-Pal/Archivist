@@ -636,12 +636,24 @@ are downloaded into the image; later builds reuse the cached layer.
 
 ```bash
 docker build -t archivist .
+
+# /data must be writable by UID 1000, which is what Spaces mounts.
+docker volume create archivist-data
+docker run --rm -v archivist-data:/data --user root \
+  --entrypoint chown archivist -R 1000:1000 /data
+
 docker run --rm -p 7860:7860 \
   -e DB_URL="postgresql://..." \
   -e GROQ_API_KEY="..." \
+  -e COOKIE_SECURE=false \
   -v archivist-data:/data \
   archivist
 ```
+
+`COOKIE_SECURE=false` is needed only for local testing: the image defaults to
+`true`, and a browser will not return a `Secure` cookie over plain HTTP. Without
+a writable `/data` the container still starts, but logs a warning and falls back
+to ephemeral storage.
 
 ### Operational notes
 

@@ -46,6 +46,11 @@ SentenceTransformer('BAAI/bge-small-en-v1.5'); \
 CrossEncoder('BAAI/bge-reranker-base'); \
 print('models cached')"
 
+# Scripts under docker/ import the app packages, and Python puts the script's
+# own directory on sys.path rather than the working directory. Declared after
+# the layers above so changing it does not invalidate the model cache.
+ENV PYTHONPATH=/home/user/app
+
 COPY --chown=user . .
 
 EXPOSE 7860
