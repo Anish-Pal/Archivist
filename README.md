@@ -615,9 +615,22 @@ Three properties of the app drive the deployment:
    HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name>
    ```
 
-Only git-tracked files are published, so `.env`, `data/` and `chroma_db/` never
-leave the machine. The first build takes roughly 10–15 minutes because the model
-weights are downloaded into the image; later builds reuse the cached layer.
+   The branch currently checked out is what gets deployed. Pass a ref
+   explicitly to deploy something else:
+
+   ```bash
+   HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name> deploy/hf-spaces
+   ```
+
+   Spaces always build from their own `main`, so the chosen source ref is
+   pushed into the Space's `main` regardless of its name locally. Override the
+   target with `HF_SPACE_BRANCH` if needed.
+
+The script exports the ref with `git archive`, so only committed, git-tracked
+content is published — `.env`, `data/` and `chroma_db/` never leave the machine,
+and uncommitted edits are not deployed (the script warns when the working tree
+is dirty). The first build takes roughly 10–15 minutes because the model weights
+are downloaded into the image; later builds reuse the cached layer.
 
 ### Verifying locally
 
