@@ -300,7 +300,6 @@ Enterprise RAG Assistant/
 │   └── aws/
 │       ├── bootstrap.sh
 │       ├── docker-compose.yml
-│       ├── nginx.conf
 │       └── .env.example
 │
 ├── api/
@@ -600,45 +599,60 @@ Three properties of the app drive the deployment:
 | `docker/entrypoint.sh` | Validates secrets, resolves storage, migrates, starts Uvicorn |
 | `docker/bootstrap_db.py` | Chooses between schema creation and an incremental Alembic upgrade |
 | `deploy/aws/bootstrap.sh` | Provisions a fresh Ubuntu instance end to end |
-| `deploy/aws/docker-compose.yml` | Runs the app on loopback with a bind-mounted volume |
-| `deploy/aws/nginx.conf` | TLS reverse proxy with upload and timeout limits raised |
+| `deploy/aws/docker-compose.yml` | Runs the app plus a Cloudflare Tunnel sidecar |
 
 ### EC2
+
+The app is published through a **Cloudflare Tunnel** rather than a public
+listener. `cloudflared` dials out to Cloudflare, so the instance needs **no
+inbound 80/443**, no domain and no certificate management, and the app is never
+bound to a public interface.
 
 1. **Create a Neon project** and copy the pooled connection string. Append
    `?sslmode=require`.
 2. **Launch the instance** — Ubuntu 24.04, `t3.medium` (4 GB), and a **30 GB**
    root volume. The image is ~3.1 GB and the build needs room for layers; the
    8 GB default runs out of disk.
-3. **Security group** — allow inbound 22, 80 and 443 only. The app binds to
-   loopback and is never exposed directly.
-4. **Point a domain** at the instance's public IP, if you want TLS.
-5. **Configure and run:**
+3. **Security group** — allow inbound **22 only**.
+4. **Configure and run:**
 
    ```bash
    git clone https://github.com/<you>/Archivist.git
    cd Archivist
    cp deploy/aws/.env.example deploy/aws/.env
    # fill in DB_URL and GROQ_API_KEY
-   sudo ./deploy/aws/bootstrap.sh example.com
+   sudo ./deploy/aws/bootstrap.sh quick
    ```
 
-`bootstrap.sh` installs Docker, nginx and certbot, adds 2 GB of swap, creates
-`/srv/archivist/data` owned by UID 1000, builds the image, and issues a
-certificate. It is idempotent, so re-running it is safe. Omit the domain to set
-everything up without nginx and verify locally against
-`http://127.0.0.1:7860/login` first.
+`bootstrap.sh` installs Docker, adds 2 GB of swap, creates `/srv/archivist/data`
+owned by UID 1000, builds the image, starts the stack and prints the public URL.
+It is idempotent, so re-running it is safe.
 
-Two limits nginx applies by default would break the app, and the supplied
-config raises both: `client_max_body_size` (1 MB, so document uploads would
-fail as a 413) and `proxy_read_timeout` (60 s, shorter than a cold retrieval
-plus reranking plus LLM call).
+#### Tunnel profiles
+
+| Profile | Hostname | Requires |
+|---|---|---|
+| `quick` (default) | Random `*.trycloudflare.com`, **changes on every tunnel restart** | Nothing |
+| `named` | Stable hostname you choose | A Cloudflare-managed domain and `CLOUDFLARE_TUNNEL_TOKEN` in `.env` |
+
+Use `quick` to get running immediately. For anything you intend to share
+repeatedly, create a tunnel in the Cloudflare Zero Trust dashboard pointing at
+`http://app:7860`, put its token in `.env`, and switch:
+
+```bash
+sudo ./deploy/aws/bootstrap.sh named
+```
+
+Two Cloudflare limits are worth knowing: free plans cut off proxied requests at
+**100 seconds** and cap request bodies at **100 MB**. Neither affects normal use
+here — models load at container startup rather than per request — but a very
+large upload or an unusually slow LLM call would surface as a 524.
 
 Updating:
 
 ```bash
 git pull
-sudo docker compose -f deploy/aws/docker-compose.yml up -d --build
+sudo docker compose -f deploy/aws/docker-compose.yml --profile quick up -d --build
 ```
 
 ### Verifying the image locally
@@ -669,8 +683,9 @@ falls back to ephemeral storage.
 - **Anyone who can reach the app can sign up.** Signup has no email
   verification and every account's questions consume the same Groq quota.
   Restrict access or accept public use deliberately.
-- `COOKIE_SECURE=true` is set in the image; nginx terminates TLS and Uvicorn
-  runs with `--proxy-headers`, so the client scheme and IP come from the proxy.
+- `COOKIE_SECURE=true` is set in the image; Cloudflare terminates TLS and
+  forwards `X-Forwarded-Proto`, and Uvicorn runs with `--proxy-headers`, so the
+  client scheme and IP come from the tunnel.
 - The app runs one worker by design. Do not add `--workers` or place it behind
   an autoscaler.
 
