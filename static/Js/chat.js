@@ -17,18 +17,29 @@ const uploadStatus = document.getElementById("uploadStatus");
 const docList = document.getElementById("docList");
 const docEmpty = document.getElementById("docEmpty");
 const logoutBtn = document.querySelector(".logout-btn");
-
+const sidebar = document.getElementById("sidebar");
+const sidebarToggle = document.getElementById("sidebarToggle");
 
 
 let activeConversationId = null
 
-// console.log(queryInput);
-// console.log(composerForm);
-// console.log(thread);
+
+
+sidebarToggle.addEventListener("click" , ()=>{
+
+    console.log("SIDEBAR BUTTON CLICKED");
+
+    sidebar.classList.toggle("is-open");
+
+    console.log("Sidebar classes:", sidebar.className);
+
+});
+
 
 loadConversations()
 restoreLastConversation()
 loadDocuments()
+
 
 
 themeToggle.addEventListener("click" , function (){
@@ -55,7 +66,6 @@ async function loadConversations() {
 
     const data = await response.json()
 
-    console.log("Conversations:" , data);
 
     renderConversations(data);
 
@@ -162,15 +172,12 @@ async function loadConversationMessages(id , title){
 
     document.getElementById("conversationTitle").textContent = title;
 
-    console.log("Loading conversation:", id);
-
     const response = await fetch(
         `/conversations/${id}/messages`
     );
 
     const messages = await response.json()
 
-    console.log("Messages:", messages);
 
     thread.querySelectorAll(".msg").forEach(function(message){
 
@@ -445,8 +452,6 @@ async function loadDocuments(){
     const response = await fetch("/documents");
 
     const data = await response.json();
-
-    console.log("Documents:", data);
 
     renderDocuments(data);
 }
