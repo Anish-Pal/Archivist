@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from database.database import Base , DATABASE_URL
-from database import models
+from database import models  # noqa: F401  (registers tables on Base)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

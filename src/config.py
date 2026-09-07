@@ -2,9 +2,14 @@
 # Project Configuration
 #=================================
 
+import os
+
 #Folder Paths
-DATA_FOLDER = "data"
-CHROMA_DB_PATH = "chroma_db"
+# Overridable so the app can point at a mounted persistent volume in
+# deployment (e.g. /data on Hugging Face Spaces) while defaulting to the
+# local project directories during development.
+DATA_FOLDER = os.getenv("DATA_FOLDER", "data")
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "chroma_db")
 
 #Text splitter
 CHUNK_SIZE = 800

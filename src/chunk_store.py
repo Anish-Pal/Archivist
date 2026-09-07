@@ -45,5 +45,4 @@ def get_user_chunk_from_store(vector_store , user_id):
             )
         )
 
-    return chunks    
-
+    return chunks

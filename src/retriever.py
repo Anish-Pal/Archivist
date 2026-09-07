@@ -20,4 +20,3 @@ def get_mmr_retriever(vector_store , k = 3 , lambda_mult = 0.5):
     )
 
     return retriever
-

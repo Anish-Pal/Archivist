@@ -38,6 +38,5 @@ def get_current_user(
     print("Session ID:", session_id)
     print("Session DB ID:", session.id)
     print("User ID:", session.user_id)
-    
-    return session.user
 
+    return session.user

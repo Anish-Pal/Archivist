@@ -30,7 +30,7 @@ def get_user_chunks(chunks , user_id):
         if chunk.metadata.get("user_id") == user_id:
             user_chunks.append(chunk)
 
-    return user_chunks        
+    return user_chunks
 
 
 
@@ -59,7 +59,7 @@ def build_user_bm25(chunks):
             data["chunks"]
         )
 
-    return user_rag         
+    return user_rag
 
 
 
@@ -73,7 +73,7 @@ def search_bm25(bm25 , chunks , query , k = 5):
     top_indices = sorted(
         range(len(scores)),
         key=lambda i : scores[i],
-        reverse=True 
+        reverse=True
     )[:k]
 
     results = []
@@ -86,7 +86,3 @@ def search_bm25(bm25 , chunks , query , k = 5):
         })
 
     return results
-
-
-
-    
