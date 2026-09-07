@@ -1,0 +1,42 @@
+# Archivist on a single EC2 instance.
+#
+# The app is bound to loopback so only nginx can reach it; the security group
+# should expose 22, 80 and 443 only. PostgreSQL stays on Neon rather than
+# running here, which keeps state off the instance and conserves credits.
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: archivist:latest
+    container_name: archivist
+    restart: unless-stopped
+
+    env_file: .env
+    environment:
+      # Served over TLS by nginx, so the session cookie must be HTTPS-only.
+      COOKIE_SECURE: "true"
+
+    # Bind mount rather than a named volume: Docker creates named volumes owned
+    # by root, and the container runs as UID 1000, which would silently trip the
+    # entrypoint's ephemeral-storage fallback. bootstrap.sh chowns this path.
+    volumes:
+      - /srv/archivist/data:/data
+
+    ports:
+      - "127.0.0.1:7860:7860"
+
+    # Models are loaded during startup; do not let the healthcheck kill the
+    # container before it finishes.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7860/login"]
+      interval: 30s
+      timeout: 5s
+      start_period: 300s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

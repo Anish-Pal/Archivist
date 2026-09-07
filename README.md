@@ -297,6 +297,11 @@ Enterprise RAG Assistant/
 │   └── bootstrap_db.py
 │
 ├── deploy/
+│   ├── aws/
+│   │   ├── bootstrap.sh
+│   │   ├── docker-compose.yml
+│   │   ├── nginx.conf
+│   │   └── .env.example
 │   └── hf/
 │       ├── SPACE_README.md
 │       └── push.sh
@@ -572,19 +577,21 @@ Document and conversation queries include the current user's ID when looking up 
 
 ## Deployment
 
-The app ships as a Docker image targeting **Hugging Face Spaces** (Docker SDK)
-with **Neon** as the managed PostgreSQL instance.
+The app ships as a Docker image. The primary target is a single **EC2**
+instance with **Neon** as the managed PostgreSQL instance; the same image also
+runs on Hugging Face Spaces (see [Alternative](#alternative-hugging-face-spaces)).
 
 ### Why this shape
 
 Three properties of the app drive the deployment:
 
 - **Memory.** `bge-reranker-base` and `bge-small-en-v1.5` are loaded in-process
-  at startup, so the container needs roughly 2.5–4 GB of RAM. A free Space
-  (CPU Basic) provides 16 GB, which covers this comfortably.
-- **State.** Uploaded files and the Chroma index live on disk. They belong on
-  persistent storage mounted at `/data`; without it the Space runs but clears
-  both on every restart.
+  at startup, so the container needs roughly 2.5–4 GB of RAM. A `t3.medium`
+  (4 GB) fits with swap configured as headroom.
+- **State.** Uploaded files and the Chroma index live on disk and belong on a
+  volume. Chroma persists through SQLite, so this must be **block storage**
+  (EBS or a local disk) — SQLite over NFS such as EFS has broken locking and
+  will corrupt or hang under concurrent access. This rules out Fargate + EFS.
 - **A single process.** Per-user BM25 indexes are held in `app.state` and built
   once during startup, so the app runs with exactly one Uvicorn worker and must
   not be horizontally scaled.
@@ -596,48 +603,77 @@ Three properties of the app drive the deployment:
 | `Dockerfile` | CPU-only Torch, model weights baked into the image, runs as UID 1000 |
 | `docker/entrypoint.sh` | Validates secrets, resolves storage, migrates, starts Uvicorn |
 | `docker/bootstrap_db.py` | Chooses between schema creation and an incremental Alembic upgrade |
-| `deploy/hf/SPACE_README.md` | Space card with the YAML front matter Spaces requires |
-| `deploy/hf/push.sh` | Publishes the tracked working tree to the Space |
+| `deploy/aws/bootstrap.sh` | Provisions a fresh Ubuntu instance end to end |
+| `deploy/aws/docker-compose.yml` | Runs the app on loopback with a bind-mounted volume |
+| `deploy/aws/nginx.conf` | TLS reverse proxy with upload and timeout limits raised |
+| `deploy/hf/` | Space card and publish script for the Spaces alternative |
 
-### Steps
+### EC2
 
 1. **Create a Neon project** and copy the pooled connection string. Append
    `?sslmode=require`.
-2. **Create a Space** at <https://huggingface.co/new-space> with SDK **Docker**
-   (blank template) and hardware **CPU Basic**.
-3. **Add secrets** under *Settings → Variables and secrets*: `DB_URL` and
-   `GROQ_API_KEY`. The container refuses to start without both.
-4. **Add persistent storage** under *Settings → Storage* so uploads and the
-   vector index survive restarts.
-5. **Publish:**
+2. **Launch the instance** — Ubuntu 24.04, `t3.medium` (4 GB), and a **30 GB**
+   root volume. The image is ~3.1 GB and the build needs room for layers; the
+   8 GB default runs out of disk.
+3. **Security group** — allow inbound 22, 80 and 443 only. The app binds to
+   loopback and is never exposed directly.
+4. **Point a domain** at the instance's public IP, if you want TLS.
+5. **Configure and run:**
 
    ```bash
-   HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name>
+   git clone https://github.com/<you>/Archivist.git
+   cd Archivist
+   cp deploy/aws/.env.example deploy/aws/.env
+   # fill in DB_URL and GROQ_API_KEY
+   sudo ./deploy/aws/bootstrap.sh example.com
    ```
 
-   The branch currently checked out is what gets deployed. Pass a ref
-   explicitly to deploy something else:
+`bootstrap.sh` installs Docker, nginx and certbot, adds 2 GB of swap, creates
+`/srv/archivist/data` owned by UID 1000, builds the image, and issues a
+certificate. It is idempotent, so re-running it is safe. Omit the domain to set
+everything up without nginx and verify locally against
+`http://127.0.0.1:7860/login` first.
+
+Two limits nginx applies by default would break the app, and the supplied
+config raises both: `client_max_body_size` (1 MB, so document uploads would
+fail as a 413) and `proxy_read_timeout` (60 s, shorter than a cold retrieval
+plus reranking plus LLM call).
+
+Updating:
+
+```bash
+git pull
+sudo docker compose -f deploy/aws/docker-compose.yml up -d --build
+```
+
+### Alternative: Hugging Face Spaces
+
+The same image runs on a Spaces Docker SDK Space. Note that **Docker Spaces
+require a PRO subscription** — since mid-2026, only Static Spaces are free.
+
+1. Create a Space at <https://huggingface.co/new-space> with SDK **Docker**
+   (blank template) and hardware **CPU Basic**.
+2. Add `DB_URL` and `GROQ_API_KEY` under *Settings → Variables and secrets*.
+   The container refuses to start without both.
+3. Add persistent storage under *Settings → Storage* so uploads and the vector
+   index survive restarts.
+4. Publish:
 
    ```bash
    HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name> deploy/hf-spaces
    ```
 
-   Spaces always build from their own `main`, so the chosen source ref is
-   pushed into the Space's `main` regardless of its name locally. Override the
-   target with `HF_SPACE_BRANCH` if needed.
+   The script exports the named ref with `git archive`, so only committed,
+   git-tracked content is published and uncommitted edits are never deployed.
+   Spaces build from their own `main`, so the chosen ref is pushed there
+   regardless of its local name.
 
-The script exports the ref with `git archive`, so only committed, git-tracked
-content is published — `.env`, `data/` and `chroma_db/` never leave the machine,
-and uncommitted edits are not deployed (the script warns when the working tree
-is dirty). The first build takes roughly 10–15 minutes because the model weights
-are downloaded into the image; later builds reuse the cached layer.
-
-### Verifying locally
+### Verifying the image locally
 
 ```bash
 docker build -t archivist .
 
-# /data must be writable by UID 1000, which is what Spaces mounts.
+# /data must be writable by UID 1000.
 docker volume create archivist-data
 docker run --rm -v archivist-data:/data --user root \
   --entrypoint chown archivist -R 1000:1000 /data
@@ -651,19 +687,19 @@ docker run --rm -p 7860:7860 \
 ```
 
 `COOKIE_SECURE=false` is needed only for local testing: the image defaults to
-`true`, and a browser will not return a `Secure` cookie over plain HTTP. Without
-a writable `/data` the container still starts, but logs a warning and falls back
-to ephemeral storage.
+`true`, and a browser will not return a `Secure` cookie over plain HTTP.
+Without a writable `/data` the container still starts, but logs a warning and
+falls back to ephemeral storage.
 
 ### Operational notes
 
-- **Anyone who can open the Space can sign up.** Signup has no email
-  verification and every account's questions consume the same Groq quota. Set
-  the Space to private, or accept public use deliberately.
-- Free Spaces sleep after roughly 48 hours of inactivity. Waking one reloads
-  both models from the image layer, which takes tens of seconds.
-- `COOKIE_SECURE=true` is set in the image; Spaces terminate TLS, and Uvicorn
-  runs with `--proxy-headers` so client IPs and scheme are read from the proxy.
+- **Anyone who can reach the app can sign up.** Signup has no email
+  verification and every account's questions consume the same Groq quota.
+  Restrict access or accept public use deliberately.
+- `COOKIE_SECURE=true` is set in the image; nginx terminates TLS and Uvicorn
+  runs with `--proxy-headers`, so the client scheme and IP come from the proxy.
+- The app runs one worker by design. Do not add `--workers` or place it behind
+  an autoscaler.
 
 ---
 
