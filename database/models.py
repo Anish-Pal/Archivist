@@ -1,5 +1,5 @@
 from database.database import Base
-from sqlalchemy import Column , Integer , String , ForeignKey ,DateTime , JSON
+from sqlalchemy import Column , Integer , String , ForeignKey , DateTime , JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -21,7 +21,7 @@ class User(Base):
     )
 
     sessions = relationship(
-        "UserSession", 
+        "UserSession",
         back_populates="user"
     )
 
@@ -66,7 +66,7 @@ class Message(Base):
 
     content = Column(String , nullable=False)
 
-    citations = Column(JSON, nullable=True) 
+    citations = Column(JSON, nullable=True)
 
     conversation = relationship(
         "Conversation",
@@ -112,7 +112,3 @@ class Documents(Base):
         "User",
         back_populates="documents"
     )
-
-
-
-

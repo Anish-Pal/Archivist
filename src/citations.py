@@ -19,7 +19,7 @@ def extract_citation_number(answer):
     sorted_numbers = sorted(unique_numbers)
 
     return sorted_numbers
-    
+
 
 
 
@@ -43,6 +43,3 @@ def get_citations(answers , citations_map):
         })
 
     return results
-
-    
-

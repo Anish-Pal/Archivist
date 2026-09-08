@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from datetime import datetime
 
 
 class SignupRequest(BaseModel):
@@ -13,6 +12,3 @@ class LoginRequest(BaseModel):
 
     email : str
     password : str
-
-
-

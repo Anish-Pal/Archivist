@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from src.embedder import get_embedding_model
 from src.vector_store import get_vector_store
 from src.reranker import get_reranker
@@ -50,4 +48,3 @@ def initialize_rag():
         "query_rewriter": query_rewriter,
         "user_rag" : user_rag
     }
-

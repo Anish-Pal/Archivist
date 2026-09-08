@@ -51,5 +51,3 @@ def needs_query_rewriting(query , history):
 
 
     return False
-
-

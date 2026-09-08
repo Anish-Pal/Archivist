@@ -73,8 +73,3 @@ def rewrite_query(llm , history , query):
             )
 
             return query
-
-
-
-
-

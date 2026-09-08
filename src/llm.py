@@ -73,4 +73,3 @@ def generate_answer(llm , query , context):
                 "because the language model service is "
                 "currently unavailable."
             )
-    

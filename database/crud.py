@@ -95,7 +95,7 @@ def get_message_history(
             "content" : message.content
         })
 
-    return history    
+    return history
 
 
 
@@ -115,7 +115,7 @@ def update_conversation_title(
         db.commit()
         db.refresh(conversation)
 
-    return conversation    
+    return conversation
 
 
 

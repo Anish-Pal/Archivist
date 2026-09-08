@@ -1,0 +1,4 @@
+# Development and CI tooling. Not installed into the runtime image.
+-r requirements.txt
+
+flake8==7.3.0

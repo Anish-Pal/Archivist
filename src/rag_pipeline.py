@@ -113,4 +113,3 @@ def process_query(
 
 
     return answer, sources
-

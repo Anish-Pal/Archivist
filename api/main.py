@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
@@ -5,10 +6,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from fastapi import (
     FastAPI,
-    Depends, 
-    UploadFile, 
-    File, 
-    HTTPException, 
+    Depends,
+    UploadFile,
+    File,
+    HTTPException,
     Response,
     Request
 )
@@ -18,19 +19,19 @@ from sqlalchemy.orm import Session
 
 
 from api.schemas import (
-    ChatRequest, 
-    ChatResponse, 
-    ConversationsResponse, 
+    ChatRequest,
+    ChatResponse,
+    ConversationsResponse,
     MessageResponse,
     UserResponse,
     DocumentResponse
 )
-from auth.schemas import SignupRequest , LoginRequest 
+from auth.schemas import SignupRequest , LoginRequest
 from auth.security import hash_password , verify_password
 from src.rag_initializer import initialize_rag
 from src.rag_pipeline import process_query
 from api.dependencies import get_rag
-from src.config import DATA_FOLDER
+from src.config import DATA_FOLDER , CHROMA_DB_PATH
 from src.ingestion_pipeline import ingest_file
 from src.chunk_store import get_user_chunk_from_store
 from src.bm25_retriever import create_bm25_retriever
@@ -55,10 +56,20 @@ from auth.session import create_session
 
 
 
+# Session cookies must be HTTPS-only once the app is served over TLS.
+# Kept off by default so local http://127.0.0.1 development still works.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
+
 @asynccontextmanager
 async def lifespan(app : FastAPI):
 
     print("Starting FastApi application")
+
+    # These directories are gitignored and are absent in a fresh container,
+    # so create them before anything tries to read or write them.
+    Path(DATA_FOLDER).mkdir(parents = True , exist_ok = True)
+    Path(CHROMA_DB_PATH).mkdir(parents = True , exist_ok = True)
 
     app.state.rag = initialize_rag()
 
@@ -95,7 +106,7 @@ def home(
         return RedirectResponse(url = "/chat-page")
 
     return RedirectResponse(url = "/login")
-    
+
 
 
 
@@ -129,7 +140,7 @@ def chat_page(
             status_code=303
         )
 
-    
+
     response =  templates.TemplateResponse(
         request=request,
         name="chat.html"
@@ -199,7 +210,7 @@ async def upload_file(
 
         f.write(content)
 
-    file_hash = calculate_file_hash(file_path)    
+    file_hash = calculate_file_hash(file_path)
 
     if is_document_indexed(
         rag["vector_store"],
@@ -226,8 +237,8 @@ async def upload_file(
         status = ingest_file(
             file_path,
             rag["vector_store"] ,
-            current_user.id , 
-            document.id , 
+            current_user.id ,
+            document.id ,
             safe_filename
         )
 
@@ -288,7 +299,7 @@ def chat(
 
     user_id = current_user.id
 
-    if request.conversation_id == None:
+    if request.conversation_id is None:
 
         conversation = create_conversation(
             db,
@@ -308,16 +319,16 @@ def chat(
             raise HTTPException(
                 status_code=404,
                   detail="Conversation not found"
-            )    
+            )
 
     conversation_id = conversation.id
-    
+
     history = get_message_history(
         db,
         conversation_id
-    ) 
+    )
 
-    if(len(history) == 0):
+    if (len(history) == 0):
 
         update_conversation_title(
             db,
@@ -353,7 +364,7 @@ def chat(
         llm,
         query_rewriter,
         user_id
-    )    
+    )
 
     save_message(
         db,
@@ -370,7 +381,7 @@ def chat(
         citations = sources
     )
 
-    return{
+    return {
         "conversation_id" : conversation_id,
         "title": conversation.title,
         "answer" : answer,
@@ -395,7 +406,7 @@ def create_new_conversation(
         "New Title"
     )
 
-    return{
+    return {
         "conversation_id" : conversation.id,
         "title" : conversation.title
     }
@@ -405,7 +416,7 @@ def create_new_conversation(
 
 
 @app.get(
-        "/conversations" , 
+        "/conversations" ,
          response_model=list[ConversationsResponse]
         )
 def get_all_conversations(
@@ -421,7 +432,7 @@ def get_all_conversations(
     )
 
     return conversations
-    
+
 
 
 
@@ -487,7 +498,7 @@ def delete_conversation(
     db.delete(conversation)
     db.commit()
 
-    return{
+    return {
         "message" : "Conversation deleted successfully"
     }
 
@@ -563,7 +574,7 @@ async def signup_page(
 def login(
         request : LoginRequest,
         response : Response,
-        db : Session = Depends(get_db) 
+        db : Session = Depends(get_db)
 ):
     existing_user = get_user_by_email(
         db,
@@ -594,7 +605,7 @@ def login(
         key = "session_id",
         value = new_session.session_id,
         httponly = True,
-        secure = False,
+        secure = COOKIE_SECURE,
         samesite = "lax"
     )
 
@@ -629,7 +640,7 @@ def logout(
 
     return {
         "message": "Logout successful"
-    }        
+    }
 
 
 
@@ -659,7 +670,7 @@ def get_documents(
 def get_document_by_id(
         document_id : int,
         current_user : User = Depends(get_current_user),
-        db : Session = Depends(get_db) 
+        db : Session = Depends(get_db)
 ):
 
     document = db.query(Documents).filter(
@@ -717,7 +728,7 @@ def delete_document(
 
         # Rebuild this user's cached chunks + BM25
         user_chunks = get_user_chunk_from_store(
-            rag["vector_store"], 
+            rag["vector_store"],
             current_user.id
         )
 
@@ -726,13 +737,13 @@ def delete_document(
             user_bm25 = create_bm25_retriever(user_chunks)
 
             rag["user_rag"][current_user.id] = {
-                "chunks": user_chunks, 
+                "chunks": user_chunks,
                 "bm25": user_bm25
                 }
 
         else:
 
-            rag["user_rag"].pop(current_user.id, None)    
+            rag["user_rag"].pop(current_user.id, None)
 
     except Exception as e:
 
@@ -746,7 +757,7 @@ def delete_document(
             status_code = 500,
             detail = "Error deleting document"
         )
-   
-    return{
+
+    return {
         "message": "Document deleted successfully"
-    }    
+    }

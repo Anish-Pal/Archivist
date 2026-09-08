@@ -4,4 +4,4 @@ def add_metadata(chunks , metadata):
 
             chunk.metadata[key] = value
 
-    return chunks        
+    return chunks

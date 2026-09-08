@@ -17,10 +17,12 @@ Built with a focus on practical backend engineering, retrieval quality, authenti
 - [Project Structure](#project-structure)
 - [Screenshots](#screenshots)
 - [Setup and Installation](#setup-and-installation)
+- [Linting](#linting)
 - [Environment Variables](#environment-variables)
 - [Running the Application](#running-the-application)
 - [API Reference](#api-reference)
 - [Security and Multi-Tenancy](#security-and-multi-tenancy)
+- [Deployment](#deployment)
 - [Known Limitations](#known-limitations)
 - [Future Work](#future-work)
 - [License](#license)
@@ -283,7 +285,21 @@ Enterprise RAG Assistant/
 │
 |
 ├── requirements.txt
+├── requirements-dev.txt
+├── .flake8
 ├── .gitignore
+├── .dockerignore
+├── .env.example
+├── Dockerfile
+│
+├── docker/
+│   ├── entrypoint.sh
+│   └── bootstrap_db.py
+│
+├── deploy/
+│   └── hf/
+│       ├── SPACE_README.md
+│       └── push.sh
 │
 ├── api/
 │   ├── __init__.py
@@ -337,7 +353,7 @@ Enterprise RAG Assistant/
 │   │   ├── auth.css
 │   │   └── signup.css
 │   │
-│   └── js/
+│   └── Js/
 │       ├── chat.js
 │       ├── login.js
 │       └── signup.js
@@ -416,19 +432,30 @@ Create a `.env` file in the project root:
 ```env
 GROQ_API_KEY=your_groq_api_key
 HF_TOKEN=your_huggingface_token
-DATABASE_URL=postgresql://user:password@localhost:5432/archivist
+DB_URL=postgresql://user:password@localhost:5432/archivist
 ```
+
+See [`.env.example`](.env.example) for the full list, including the optional
+`DATA_FOLDER`, `CHROMA_DB_PATH` and `COOKIE_SECURE` overrides.
 
 Never commit `.env` or API keys to GitHub.
 
 ### 5. Start PostgreSQL
 
-Create the PostgreSQL database configured in `DATABASE_URL`.
+Create the PostgreSQL database configured in `DB_URL`, then apply the schema:
+
+```bash
+python docker/bootstrap_db.py
+alembic stamp head
+```
+
+For a database that already has an `alembic_version` table, run
+`alembic upgrade head` instead.
 
 ### 6. Run the application
 
 ```bash
-uvicorn app:app --reload
+uvicorn api.main:app --reload
 ```
 
 Open:
@@ -436,6 +463,17 @@ Open:
 ```text
 http://127.0.0.1:8000
 ```
+
+### Linting
+
+```bash
+pip install -r requirements-dev.txt
+flake8
+```
+
+Configuration lives in [`.flake8`](.flake8). The project's spacing conventions
+(`Depends , get_db`, `key = "value"`) are excluded; pyflakes checks, line
+length, comparison correctness and whitespace hygiene are enforced.
 
 ---
 
@@ -445,7 +483,10 @@ http://127.0.0.1:8000
 |---|---|
 | `GROQ_API_KEY` | Authenticates requests to the Groq API |
 | `HF_TOKEN` | Hugging Face authentication when required |
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DB_URL` | PostgreSQL connection string |
+| `DATA_FOLDER` | Upload directory (default `data`) |
+| `CHROMA_DB_PATH` | ChromaDB persistence directory (default `chroma_db`) |
+| `COOKIE_SECURE` | Set `true` to restrict the session cookie to HTTPS |
 
 Keep credentials in `.env` locally and configure them as environment variables on the hosting platform.
 
@@ -526,6 +567,103 @@ only that user's chunks
 ### Resource ownership
 
 Document and conversation queries include the current user's ID when looking up resources. This prevents users from accessing resources belonging to another account.
+
+---
+
+## Deployment
+
+The app ships as a Docker image targeting **Hugging Face Spaces** (Docker SDK)
+with **Neon** as the managed PostgreSQL instance.
+
+### Why this shape
+
+Three properties of the app drive the deployment:
+
+- **Memory.** `bge-reranker-base` and `bge-small-en-v1.5` are loaded in-process
+  at startup, so the container needs roughly 2.5–4 GB of RAM. A free Space
+  (CPU Basic) provides 16 GB, which covers this comfortably.
+- **State.** Uploaded files and the Chroma index live on disk. They belong on
+  persistent storage mounted at `/data`; without it the Space runs but clears
+  both on every restart.
+- **A single process.** Per-user BM25 indexes are held in `app.state` and built
+  once during startup, so the app runs with exactly one Uvicorn worker and must
+  not be horizontally scaled.
+
+### Files
+
+| Path | Purpose |
+|---|---|
+| `Dockerfile` | CPU-only Torch, model weights baked into the image, runs as UID 1000 |
+| `docker/entrypoint.sh` | Validates secrets, resolves storage, migrates, starts Uvicorn |
+| `docker/bootstrap_db.py` | Chooses between schema creation and an incremental Alembic upgrade |
+| `deploy/hf/SPACE_README.md` | Space card with the YAML front matter Spaces requires |
+| `deploy/hf/push.sh` | Publishes the tracked working tree to the Space |
+
+### Steps
+
+1. **Create a Neon project** and copy the pooled connection string. Append
+   `?sslmode=require`.
+2. **Create a Space** at <https://huggingface.co/new-space> with SDK **Docker**
+   (blank template) and hardware **CPU Basic**.
+3. **Add secrets** under *Settings → Variables and secrets*: `DB_URL` and
+   `GROQ_API_KEY`. The container refuses to start without both.
+4. **Add persistent storage** under *Settings → Storage* so uploads and the
+   vector index survive restarts.
+5. **Publish:**
+
+   ```bash
+   HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name>
+   ```
+
+   The branch currently checked out is what gets deployed. Pass a ref
+   explicitly to deploy something else:
+
+   ```bash
+   HF_TOKEN=hf_xxx ./deploy/hf/push.sh <username>/<space-name> deploy/hf-spaces
+   ```
+
+   Spaces always build from their own `main`, so the chosen source ref is
+   pushed into the Space's `main` regardless of its name locally. Override the
+   target with `HF_SPACE_BRANCH` if needed.
+
+The script exports the ref with `git archive`, so only committed, git-tracked
+content is published — `.env`, `data/` and `chroma_db/` never leave the machine,
+and uncommitted edits are not deployed (the script warns when the working tree
+is dirty). The first build takes roughly 10–15 minutes because the model weights
+are downloaded into the image; later builds reuse the cached layer.
+
+### Verifying locally
+
+```bash
+docker build -t archivist .
+
+# /data must be writable by UID 1000, which is what Spaces mounts.
+docker volume create archivist-data
+docker run --rm -v archivist-data:/data --user root \
+  --entrypoint chown archivist -R 1000:1000 /data
+
+docker run --rm -p 7860:7860 \
+  -e DB_URL="postgresql://..." \
+  -e GROQ_API_KEY="..." \
+  -e COOKIE_SECURE=false \
+  -v archivist-data:/data \
+  archivist
+```
+
+`COOKIE_SECURE=false` is needed only for local testing: the image defaults to
+`true`, and a browser will not return a `Secure` cookie over plain HTTP. Without
+a writable `/data` the container still starts, but logs a warning and falls back
+to ephemeral storage.
+
+### Operational notes
+
+- **Anyone who can open the Space can sign up.** Signup has no email
+  verification and every account's questions consume the same Groq quota. Set
+  the Space to private, or accept public use deliberately.
+- Free Spaces sleep after roughly 48 hours of inactivity. Waking one reloads
+  both models from the image layer, which takes tens of seconds.
+- `COOKIE_SECURE=true` is set in the image; Spaces terminate TLS, and Uvicorn
+  runs with `--proxy-headers` so client IPs and scheme are read from the proxy.
 
 ---
 

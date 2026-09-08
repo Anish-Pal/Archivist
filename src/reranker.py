@@ -33,4 +33,4 @@ def rerank(model , query , documents , top_k = 5):
         reverse = True
     )
 
-    return results[:top_k]     
+    return results[:top_k]
