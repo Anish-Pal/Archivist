@@ -594,7 +594,7 @@ def login(
         key = "session_id",
         value = new_session.session_id,
         httponly = True,
-        secure = False,
+        secure = True,
         samesite = "lax"
     )
 
