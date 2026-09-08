@@ -39,6 +39,15 @@ sidebarToggle.addEventListener("click", () => {
 
 });
 
+document.addEventListener("click", function(event) {
+    const clickedInsideSidebar = sidebar.contains(event.target);
+    const clickedToggleButton = sidebarToggle.contains(event.target);
+
+    if (sidebar.classList.contains("is-open") && !clickedInsideSidebar && !clickedToggleButton) {
+        sidebar.classList.remove("is-open");
+    }
+});
+
 loadConversations()
 restoreLastConversation()
 loadDocuments()
@@ -127,9 +136,9 @@ function renderConversations(conversations) {
                 conversation.id,
                 conversation.title
             );
+            sidebar.classList.remove("is-open");
         });
 
-        sidebar.classList.remove("is-open");
 
 
         convList.appendChild(li);
