@@ -1,0 +1,80 @@
+# Archivist on a single EC2 instance, exposed through a Cloudflare Tunnel.
+#
+# The tunnel dials out to Cloudflare, so the instance needs no inbound 80/443
+# and the app is never bound to a public interface. PostgreSQL stays on Neon
+# rather than running here, which keeps state off the instance.
+#
+#   docker compose --profile quick up -d --build   # random trycloudflare.com URL
+#   docker compose --profile named up -d --build   # stable hostname, needs a token
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: archivist:latest
+    container_name: archivist
+    restart: unless-stopped
+
+    env_file: .env
+    environment:
+      # Cloudflare terminates TLS and forwards X-Forwarded-Proto, so the
+      # browser is on HTTPS and the session cookie must be Secure.
+      COOKIE_SECURE: "true"
+
+    # Bind mount rather than a named volume: Docker creates named volumes owned
+    # by root, and the container runs as UID 1000, which would silently trip the
+    # entrypoint's ephemeral-storage fallback. bootstrap.sh chowns this path.
+    volumes:
+      - /srv/archivist/data:/data
+
+    # Loopback only, for debugging from inside the instance. The tunnel reaches
+    # the app over the compose network, not through this mapping.
+    ports:
+      - "127.0.0.1:7860:7860"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7860/login"]
+      interval: 30s
+      timeout: 5s
+      # Both models load during startup; do not let the check kill the
+      # container before it finishes.
+      start_period: 300s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # Zero-setup tunnel. Cloudflare allocates a random *.trycloudflare.com
+  # hostname, printed in this service's logs. The URL changes on every restart
+  # and Cloudflare does not intend these for production.
+  tunnel-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: archivist-tunnel
+    restart: unless-stopped
+    profiles: ["quick"]
+    command: tunnel --no-autoupdate --url http://app:7860
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # Stable hostname on a domain managed by Cloudflare. Create the tunnel in the
+  # Zero Trust dashboard, point it at http://app:7860, and put its token in
+  # .env as CLOUDFLARE_TUNNEL_TOKEN.
+  tunnel-named:
+    image: cloudflare/cloudflared:latest
+    container_name: archivist-tunnel
+    restart: unless-stopped
+    profiles: ["named"]
+    # Defaulted rather than required: compose interpolates every service even
+    # when only the quick profile is selected, so a hard requirement here would
+    # break the tokenless path. bootstrap.sh validates it for the named profile.
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    env_file: .env
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

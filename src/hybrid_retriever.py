@@ -27,9 +27,9 @@ def reciprocal_rank_fusion(vector_results , bm25_results , rrf_constant = 60):
 
     for rank , result in enumerate(bm25_results , start=1):
 
-        doc = result["chunk"]   
+        doc = result["chunk"]
 
-        doc_id = doc.metadata["id"] 
+        doc_id = doc.metadata["id"]
 
         documents[doc_id] = doc
 
@@ -47,7 +47,7 @@ def reciprocal_rank_fusion(vector_results , bm25_results , rrf_constant = 60):
         key=scores.get,
         reverse=True
     )
-    
+
     results = []
 
 
@@ -100,7 +100,3 @@ def hybrid_retriever(vector_store , bm25 , chunks , query , user_id, k=5 , rrf_c
     )
 
     return hybrid_results[:k]
-
-
-
-

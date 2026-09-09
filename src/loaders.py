@@ -1,7 +1,7 @@
 from pathlib import Path
 from langchain_community.document_loaders import (
-    PyPDFLoader , 
-    TextLoader , 
+    PyPDFLoader ,
+    TextLoader ,
     CSVLoader
 )
 
@@ -23,7 +23,3 @@ def load_documents(file_path):
         raise ValueError(f"Unsupported file type: {file_path.suffix}")
 
     return loader.load()
-
-
-
-    

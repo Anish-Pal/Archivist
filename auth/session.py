@@ -26,4 +26,3 @@ def create_session(
     db.refresh(new_session)
 
     return new_session
-

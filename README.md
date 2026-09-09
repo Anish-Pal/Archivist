@@ -17,10 +17,12 @@ Built with a focus on practical backend engineering, retrieval quality, authenti
 - [Project Structure](#project-structure)
 - [Screenshots](#screenshots)
 - [Setup and Installation](#setup-and-installation)
+- [Linting](#linting)
 - [Environment Variables](#environment-variables)
 - [Running the Application](#running-the-application)
 - [API Reference](#api-reference)
 - [Security and Multi-Tenancy](#security-and-multi-tenancy)
+- [Deployment](#deployment)
 - [Known Limitations](#known-limitations)
 - [Future Work](#future-work)
 - [License](#license)
@@ -283,7 +285,22 @@ Enterprise RAG Assistant/
 │
 |
 ├── requirements.txt
+├── requirements-dev.txt
+├── .flake8
 ├── .gitignore
+├── .dockerignore
+├── .env.example
+├── Dockerfile
+│
+├── docker/
+│   ├── entrypoint.sh
+│   └── bootstrap_db.py
+│
+├── deploy/
+│   └── aws/
+│       ├── bootstrap.sh
+│       ├── docker-compose.yml
+│       └── .env.example
 │
 ├── api/
 │   ├── __init__.py
@@ -337,7 +354,7 @@ Enterprise RAG Assistant/
 │   │   ├── auth.css
 │   │   └── signup.css
 │   │
-│   └── js/
+│   └── Js/
 │       ├── chat.js
 │       ├── login.js
 │       └── signup.js
@@ -416,19 +433,30 @@ Create a `.env` file in the project root:
 ```env
 GROQ_API_KEY=your_groq_api_key
 HF_TOKEN=your_huggingface_token
-DATABASE_URL=postgresql://user:password@localhost:5432/archivist
+DB_URL=postgresql://user:password@localhost:5432/archivist
 ```
+
+See [`.env.example`](.env.example) for the full list, including the optional
+`DATA_FOLDER`, `CHROMA_DB_PATH` and `COOKIE_SECURE` overrides.
 
 Never commit `.env` or API keys to GitHub.
 
 ### 5. Start PostgreSQL
 
-Create the PostgreSQL database configured in `DATABASE_URL`.
+Create the PostgreSQL database configured in `DB_URL`, then apply the schema:
+
+```bash
+python docker/bootstrap_db.py
+alembic stamp head
+```
+
+For a database that already has an `alembic_version` table, run
+`alembic upgrade head` instead.
 
 ### 6. Run the application
 
 ```bash
-uvicorn app:app --reload
+uvicorn api.main:app --reload
 ```
 
 Open:
@@ -436,6 +464,17 @@ Open:
 ```text
 http://127.0.0.1:8000
 ```
+
+### Linting
+
+```bash
+pip install -r requirements-dev.txt
+flake8
+```
+
+Configuration lives in [`.flake8`](.flake8). The project's spacing conventions
+(`Depends , get_db`, `key = "value"`) are excluded; pyflakes checks, line
+length, comparison correctness and whitespace hygiene are enforced.
 
 ---
 
@@ -445,7 +484,10 @@ http://127.0.0.1:8000
 |---|---|
 | `GROQ_API_KEY` | Authenticates requests to the Groq API |
 | `HF_TOKEN` | Hugging Face authentication when required |
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DB_URL` | PostgreSQL connection string |
+| `DATA_FOLDER` | Upload directory (default `data`) |
+| `CHROMA_DB_PATH` | ChromaDB persistence directory (default `chroma_db`) |
+| `COOKIE_SECURE` | Set `true` to restrict the session cookie to HTTPS |
 
 Keep credentials in `.env` locally and configure them as environment variables on the hosting platform.
 
@@ -526,6 +568,126 @@ only that user's chunks
 ### Resource ownership
 
 Document and conversation queries include the current user's ID when looking up resources. This prevents users from accessing resources belonging to another account.
+
+---
+
+## Deployment
+
+The app ships as a Docker image, deployed to a single **EC2** instance with
+**Neon** as the managed PostgreSQL instance.
+
+### Why this shape
+
+Three properties of the app drive the deployment:
+
+- **Memory.** `bge-reranker-base` and `bge-small-en-v1.5` are loaded in-process
+  at startup, so the container needs roughly 2.5–4 GB of RAM. A `t3.medium`
+  (4 GB) fits with swap configured as headroom.
+- **State.** Uploaded files and the Chroma index live on disk and belong on a
+  volume. Chroma persists through SQLite, so this must be **block storage**
+  (EBS or a local disk) — SQLite over NFS such as EFS has broken locking and
+  will corrupt or hang under concurrent access. This rules out Fargate + EFS.
+- **A single process.** Per-user BM25 indexes are held in `app.state` and built
+  once during startup, so the app runs with exactly one Uvicorn worker and must
+  not be horizontally scaled.
+
+### Files
+
+| Path | Purpose |
+|---|---|
+| `Dockerfile` | CPU-only Torch, model weights baked into the image, runs as UID 1000 |
+| `docker/entrypoint.sh` | Validates secrets, resolves storage, migrates, starts Uvicorn |
+| `docker/bootstrap_db.py` | Chooses between schema creation and an incremental Alembic upgrade |
+| `deploy/aws/bootstrap.sh` | Provisions a fresh Ubuntu instance end to end |
+| `deploy/aws/docker-compose.yml` | Runs the app plus a Cloudflare Tunnel sidecar |
+
+### EC2
+
+The app is published through a **Cloudflare Tunnel** rather than a public
+listener. `cloudflared` dials out to Cloudflare, so the instance needs **no
+inbound 80/443**, no domain and no certificate management, and the app is never
+bound to a public interface.
+
+1. **Create a Neon project** and copy the pooled connection string. Append
+   `?sslmode=require`.
+2. **Launch the instance** — Ubuntu 24.04, `t3.medium` (4 GB), and a **30 GB**
+   root volume. The image is ~3.1 GB and the build needs room for layers; the
+   8 GB default runs out of disk.
+3. **Security group** — allow inbound **22 only**.
+4. **Configure and run:**
+
+   ```bash
+   git clone https://github.com/<you>/Archivist.git
+   cd Archivist
+   cp deploy/aws/.env.example deploy/aws/.env
+   # fill in DB_URL and GROQ_API_KEY
+   sudo ./deploy/aws/bootstrap.sh quick
+   ```
+
+`bootstrap.sh` installs Docker, adds 2 GB of swap, creates `/srv/archivist/data`
+owned by UID 1000, builds the image, starts the stack and prints the public URL.
+It is idempotent, so re-running it is safe.
+
+#### Tunnel profiles
+
+| Profile | Hostname | Requires |
+|---|---|---|
+| `quick` (default) | Random `*.trycloudflare.com`, **changes on every tunnel restart** | Nothing |
+| `named` | Stable hostname you choose | A Cloudflare-managed domain and `CLOUDFLARE_TUNNEL_TOKEN` in `.env` |
+
+Use `quick` to get running immediately. For anything you intend to share
+repeatedly, create a tunnel in the Cloudflare Zero Trust dashboard pointing at
+`http://app:7860`, put its token in `.env`, and switch:
+
+```bash
+sudo ./deploy/aws/bootstrap.sh named
+```
+
+Two Cloudflare limits are worth knowing: free plans cut off proxied requests at
+**100 seconds** and cap request bodies at **100 MB**. Neither affects normal use
+here — models load at container startup rather than per request — but a very
+large upload or an unusually slow LLM call would surface as a 524.
+
+Updating:
+
+```bash
+git pull
+sudo docker compose -f deploy/aws/docker-compose.yml --profile quick up -d --build
+```
+
+### Verifying the image locally
+
+```bash
+docker build -t archivist .
+
+# /data must be writable by UID 1000.
+docker volume create archivist-data
+docker run --rm -v archivist-data:/data --user root \
+  --entrypoint chown archivist -R 1000:1000 /data
+
+docker run --rm -p 7860:7860 \
+  -e DB_URL="postgresql://..." \
+  -e GROQ_API_KEY="..." \
+  -e COOKIE_SECURE=false \
+  -v archivist-data:/data \
+  archivist
+```
+
+`COOKIE_SECURE=false` is needed only for local testing: the image defaults to
+`true`, and a browser will not return a `Secure` cookie over plain HTTP.
+Without a writable `/data` the container still starts, but logs a warning and
+falls back to ephemeral storage.
+
+### Operational notes
+
+- **Anyone who can reach the app can sign up.** Signup has no email
+  verification and every account's questions consume the same Groq quota.
+  Restrict access or accept public use deliberately.
+- `COOKIE_SECURE=true` is set in the image; Cloudflare terminates TLS and
+  forwards `X-Forwarded-Proto`, and Uvicorn runs with `--proxy-headers`, so the
+  client scheme and IP come from the tunnel.
+- The app runs one worker by design. Do not add `--workers` or place it behind
+  an autoscaler.
 
 ---
 

@@ -52,7 +52,7 @@ def delete_document_chunks(vector_store , document_id):
             ids = ids
         )
 
-    return len(ids)    
+    return len(ids)
 
 
 
@@ -61,9 +61,9 @@ def is_document_indexed(vector_store, file_hash , user_id):
 
     result = vector_store.get(
         where = {
-            "$and":[
+            "$and": [
                 {"file_hash" : file_hash},
-                {"user_id" : user_id} 
+                {"user_id" : user_id}
             ]
         },
         limit=1

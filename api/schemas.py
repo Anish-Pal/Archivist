@@ -17,9 +17,9 @@ class Source(BaseModel):
 
 class ChatResponse(BaseModel):
     conversation_id : int
-    answer : str   
+    answer : str
     title : str
-    sources : list[Source]     
+    sources : list[Source]
 
 
 class Usercreate(BaseModel):
@@ -36,11 +36,11 @@ class MessageResponse(BaseModel):
     id: int
     conversation_id: int
     role: str
-    content: str   
+    content: str
     citations: Optional[list[Source]] = None
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
 
 
 class UserResponse(BaseModel):
@@ -59,4 +59,4 @@ class DocumentResponse(BaseModel):
     created_at : datetime
 
     class Config:
-        from_attributes = True        
+        from_attributes = True
