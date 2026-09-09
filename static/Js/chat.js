@@ -25,16 +25,28 @@ let activeConversationId = null
 
 
 
-sidebarToggle.addEventListener("click" , ()=>{
+sidebarToggle.addEventListener("click", () => {
 
-    console.log("SIDEBAR BUTTON CLICKED");
+    if (sidebar.classList.contains("is-open")) {
 
-    sidebar.classList.toggle("is-open");
+        sidebar.classList.remove("is-open");
 
-    console.log("Sidebar classes:", sidebar.className);
+    } else {
+
+        sidebar.classList.add("is-open");
+
+    }
 
 });
 
+document.addEventListener("click", function(event) {
+    const clickedInsideSidebar = sidebar.contains(event.target);
+    const clickedToggleButton = sidebarToggle.contains(event.target);
+
+    if (sidebar.classList.contains("is-open") && !clickedInsideSidebar && !clickedToggleButton) {
+        sidebar.classList.remove("is-open");
+    }
+});
 
 loadConversations()
 restoreLastConversation()
@@ -124,7 +136,10 @@ function renderConversations(conversations) {
                 conversation.id,
                 conversation.title
             );
-        })
+            sidebar.classList.remove("is-open");
+        });
+
+
 
         convList.appendChild(li);
 
@@ -309,7 +324,13 @@ function hideTyping() {
     }
 }
 
-newChatBtn.addEventListener("click", createConversation);
+newChatBtn.addEventListener("click", () => {
+
+    createConversation();
+
+    sidebar.classList.remove("is-open");
+
+});
 
 
 
